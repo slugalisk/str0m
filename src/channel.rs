@@ -85,6 +85,17 @@ impl<'a> Channel<'a> {
         self.rtc.sctp.buffered_amount(self.sctp_stream_id)
     }
 
+    /// Get the amount of buffered data not yet sent.
+    ///
+    /// [`Channel::buffered_amount`] counts data until the remote peer acknowledges
+    /// it, so it includes the data in flight. This counts only what SCTP hasn't
+    /// sent yet because its congestion or receive window holds it back, like a TCP
+    /// socket's unsent bytes. Returns 0 if the channel is closed or encountered
+    /// some error.
+    pub fn unsent_amount(&mut self) -> usize {
+        self.rtc.sctp.unsent_amount(self.sctp_stream_id)
+    }
+
     /// Set the threshold to emit an
     /// [`Event::ChannelBufferedAmountLow`][crate::Event::ChannelBufferedAmountLow]
     ///

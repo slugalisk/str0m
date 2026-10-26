@@ -469,6 +469,50 @@ fn fill_send_buffer(max_buffered_amount: Option<usize>) -> Result<usize, RtcErro
     Ok(accepted)
 }
 
+/// The unsent amount leaves out the data in flight: sent data stays buffered until
+/// the remote peer acknowledges it, but it isn't unsent.
+#[test]
+pub fn data_channel_unsent_amount() -> Result<(), RtcError> {
+    init_log();
+    init_crypto_default();
+
+    const MESSAGE: usize = 16 * 1024;
+    let (mut l, mut r, cid) = connect_with_channel(|config| config)?;
+    // A round trip longer than a progress step, so sent data waits for its
+    // acknowledgement across steps.
+    l.set_netem(NetemConfig::new().latency(Duration::from_millis(50)));
+    r.set_netem(NetemConfig::new().latency(Duration::from_millis(50)));
+
+    let mut chan = l.channel(cid).expect("open channel");
+    for _ in 0..4 {
+        assert!(chan.write(true, &[0; MESSAGE])?);
+    }
+    assert_eq!(chan.unsent_amount(), 4 * MESSAGE, "nothing is sent yet");
+    assert_eq!(chan.buffered_amount(), 4 * MESSAGE);
+
+    let start = l.duration();
+    let mut in_flight = false;
+    loop {
+        let mut chan = l.channel(cid).expect("open channel");
+        let (unsent, buffered) = (chan.unsent_amount(), chan.buffered_amount());
+        assert!(unsent <= buffered, "unsent {unsent} > buffered {buffered}");
+        in_flight |= unsent < buffered;
+        if buffered == 0 {
+            break;
+        }
+        progress(&mut l, &mut r)?;
+        assert!(
+            l.duration() - start < Duration::from_secs(10),
+            "the data should be acknowledged"
+        );
+    }
+    assert!(in_flight, "some data should have been in flight");
+    assert_eq!(received_bytes(&r), 4 * MESSAGE);
+    assert_eq!(l.channel(cid).expect("open channel").unsent_amount(), 0);
+
+    Ok(())
+}
+
 #[test]
 pub fn data_channel_max_buffered_amount() -> Result<(), RtcError> {
     init_log();

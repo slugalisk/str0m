@@ -663,6 +663,18 @@ impl RtcSctp {
         stream.buffered_amount().unwrap_or(0)
     }
 
+    pub fn unsent_amount(&mut self, id: u16) -> usize {
+        let Some(assoc) = self.assoc.as_mut() else {
+            return 0;
+        };
+
+        let Ok(stream) = assoc.stream(id) else {
+            return 0;
+        };
+
+        stream.unsent_amount().unwrap_or(0)
+    }
+
     pub fn set_buffered_amount_low_threshold(&mut self, id: u16, threshold: usize) {
         let entry =
             entry_by_id_mut(&mut self.entries, id).expect("stream entry for valid channel id");
